@@ -21,7 +21,7 @@ locals {
     sid       = "AllowWriteToCloudwatchLogs"
     effect    = "Allow"
     actions   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-    resources = [element(concat(aws_cloudwatch_log_group.lambda[*].arn, list("")), 0)]
+    resources = [replace("${element(concat(aws_cloudwatch_log_group.lambda[*].arn, list("")), 0)}:*", ":*:*", ":*")]
   }
 
   lambda_policy_document_kms = {
@@ -67,7 +67,7 @@ resource "aws_sns_topic_subscription" "sns_notify_slack" {
 
 module "lambda" {
   source  = "terraform-aws-modules/lambda/aws"
-  version = "1.6.0"
+  version = "1.18.0"
 
   create = var.create
 
@@ -92,7 +92,8 @@ module "lambda" {
     LOG_EVENTS        = var.log_events ? "True" : "False"
   }
 
-  create_role               = true
+  create_role               = var.lambda_role == ""
+  lambda_role               = var.lambda_role
   role_name                 = "${var.iam_role_name_prefix}-${var.lambda_function_name}"
   role_permissions_boundary = var.iam_role_boundary_policy_arn
   role_tags                 = var.iam_role_tags
@@ -104,6 +105,8 @@ module "lambda" {
   attach_policy_json            = true
   policy_json                   = element(concat(data.aws_iam_policy_document.lambda[*].json, [""]), 0)
 
+  use_existing_cloudwatch_log_group = true
+
   allowed_triggers = {
     AllowExecutionFromSNS = {
       principal  = "sns.amazonaws.com"
@@ -112,4 +115,6 @@ module "lambda" {
   }
 
   tags = merge(var.tags, var.lambda_function_tags)
+
+  depends_on = [aws_cloudwatch_log_group.lambda]
 }
